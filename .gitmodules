@@ -1,3 +1,6 @@
 [submodule "ExifReader"]
 	path = ExifReader
 	url = https://github.com/mattiasw/ExifReader.git
+[submodule "ios-imagefile-megapixel"]
+	path = ios-imagefile-megapixel
+	url = https://github.com/stomita/ios-imagefile-megapixel.git
