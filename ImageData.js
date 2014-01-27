@@ -229,6 +229,16 @@
 			var t2 = t[0].split(":");
 			return t2[1];
 		},
+		crop: function( dataURL, options, callback ) {
+			var defaults = {
+				type: false,
+				width: false,
+				height: false
+				// force: false
+			}
+			var settings = $.extend( {}, defaults, options ) ;
+			settings.type = settings.type || _imageData.type || methods.type( dataURL );
+		},
 		resize: function( dataURL, options, callback ) {
 			var defaults = {
 				type: false,
