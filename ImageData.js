@@ -25,7 +25,7 @@
 		text: false, // text loaded
 		blob: false, // binary string loaded
 		buffer: false, // array buffer loaded
-		exif: false, // exif data loaded (use https://github.com/mattiasw/ExifReader)
+		exif: true, // exif data loaded (use https://github.com/mattiasw/ExifReader)
 		resize: false, // resize array
 		complete: $.noop
 	};
@@ -92,6 +92,67 @@
 		return (ratio===0)?1:ratio;
 	}
 
+	/**
+	* Transform canvas coordination according to specified frame size and orientation
+	* Orientation value is from EXIF tag
+	*/
+	function transformCoordinate(canvas, width, height, orientation) {
+		switch (orientation) {
+			case 5:
+			case 6:
+			case 7:
+			case 8:
+				canvas.width = height;
+				canvas.height = width;
+			break;
+			default:
+				canvas.width = width;
+				canvas.height = height;
+		}
+		var ctx = canvas.getContext('2d');
+		switch (orientation) {
+			case 2:
+				// horizontal flip
+				ctx.translate(width, 0);
+				ctx.scale(-1, 1);
+			break;
+			case 3:
+				// 180 rotate left
+				ctx.translate(width, height);
+				ctx.rotate(Math.PI);
+			break;
+			case 4:
+				// vertical flip
+				ctx.translate(0, height);
+				ctx.scale(1, -1);
+			break;
+			case 5:
+				// vertical flip + 90 rotate right
+				ctx.rotate(0.5 * Math.PI);
+				ctx.scale(1, -1);
+			break;
+			case 6:
+				// 90 rotate right
+				ctx.rotate(0.5 * Math.PI);
+				ctx.translate(0, -height);
+			break;
+			case 7:
+				// horizontal flip + 90 rotate right
+				ctx.rotate(0.5 * Math.PI);
+				ctx.translate(width, -height);
+				ctx.scale(-1, 1);
+			break;
+			case 8:
+				// 90 rotate left
+				ctx.rotate(-0.5 * Math.PI);
+				ctx.translate(-width, 0);
+			break;
+			default:
+			break;
+		}
+	}
+
+	// HTML file picker
 	function createPicker() {
 		var $inputFile = $("<input>", {
 			"type": "file",
@@ -130,6 +191,9 @@
 					// resize image
 					var _asyncResize = [];
 					$.each(_settings.resize, function(index, val) {
+						if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
+							val.orientation = _imageData.exif.Orientation.value;
+						}
 						_asyncResize.push( methods.resize( _imageData.url, val ) );
 					});
 					$.when.apply( this, _asyncResize ).done(
@@ -158,7 +222,7 @@
 				type: false,
 				width: false,
 				height: false,
-				auto: true
+				orientation: 1
 			}
 			var settings = $.extend( {}, defaults, options ) ;
 			settings.type = settings.type || methods.type( dataURL );
@@ -195,11 +259,11 @@
 					canvas.height = imageHeight;
 					image.width = imageWidth;
 					image.height = imageHeight;
-					
+
 					var iw = image.naturalWidth, ih = image.naturalHeight;
 
 					context.save();
-					// transformCoordinate(canvas, width, height, options.orientation);
+					transformCoordinate(canvas, imageWidth, imageHeight, options.orientation);
 					var subsampled = detectSubsampling(image);
 					if (subsampled) {
 						iw /= 2;
@@ -209,7 +273,6 @@
 					var tmpCanvas = document.createElement('canvas');
 					tmpCanvas.width = tmpCanvas.height = d;
 					var tmpCtx = tmpCanvas.getContext('2d');
-					// var vertSquashRatio = doSquash ? detectVerticalSquash(image, iw, ih) : 1;
 					var vertSquashRatio = detectVerticalSquash(image, iw, ih);
 					var dw = Math.ceil(d * imageWidth / iw);
 					var dh = Math.ceil(d * imageHeight / ih / vertSquashRatio);
@@ -239,6 +302,7 @@
 						width: imageWidth,
 						height: imageHeight
 					}
+
 					defer.resolve( data );
 					if ( callback ) callback( data );
 				};
@@ -246,6 +310,17 @@
 					defer.reject( error );
 				};
 		    }).promise();
+		},
+		exif: function( data ) {
+			try {
+				// exif data
+				// https://github.com/mattiasw/ExifReader
+				var exif = new ExifReader();
+				exif.load( data );
+				return exif.getAllTags();
+			} catch (error) {
+				return {};
+			}
 		},
 		load: function( file, method ) {
 			method = method || "url";
@@ -257,15 +332,8 @@
 					if (evt.target.readyState == FileReader.DONE) { // DONE == 2
 						_imageData[ method ] = evt.target.result;
 						if ( method === "buffer" && _settings.exif ) {
-							try {
-								// exif data
-								// https://github.com/mattiasw/ExifReader
-								var exif = new ExifReader();
-								exif.load( _imageData[ method ] );
-								_imageData.exif = exif.getAllTags();
-							} catch (error) {
-								_imageData.exif = {};
-							}
+							// exif data
+							_imageData.exif = methods.exif( _imageData[ method ] );
 						}
 						if ( method === "url" ) {
 							var image = new Image();
