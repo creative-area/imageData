@@ -334,6 +334,9 @@
 						if ( method === "buffer" && _settings.exif ) {
 							// exif data
 							_imageData.exif = methods.exif( _imageData[ method ] );
+							if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
+								_imageData.orientation = _imageData.exif.Orientation.value;
+							}
 						}
 						if ( method === "url" ) {
 							var image = new Image();
