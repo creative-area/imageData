@@ -50,23 +50,35 @@
 
 			<script>
 			$(document).ready(function(){
+				function appendImage( data ) {
+					$( "#image-render" ).append([
+						'<div class="thumbnail">',
+							'<img src="' + data.url + '" width="' + data.width + '" height="' + data.height + '" alt="render">',
+							'<div class="caption">',
+								'<p class="text-center">'+data.width+' x '+data.height+'</p>',
+							'</div>',
+						'</div>'
+					].join( "" ));
+				}
 				$( "#image_picker" ).imageData({
+					// returnImage: true,
 					resize: [
-						{ width: 100, height: 100 },
-						{ width: 50, height: 50 }
+						{ width: 200, height: 200 },
+						{ width: 200 },
+						{ height: 200 },
+						{ width: 100, height: 100 }
 					],
 					complete: function(data) {
-						// console.log(data);
+						console.log(data);
+						
+						$( "#image-render" ).html("");
 
-						// var src = data.url;
-						$( "#image-render" ).append( '<img src="' + data.url + '" width="' + data.width + '" height="' + data.height + '" alt="render" class="img-thumbnail">' );
+						$( "#image-render" ).append( "<p>" + data.name + " (" + data.type + ")<br>" + data.width + " x " + data.height + " - " + data.size + " octets<br>Orientation " + data.orientation + "</p>");
 
-						$.fn.imageData( "resize", data.url, { width: 150, height: 150 }, function(data) {
-							$( "#image-render" ).append( '<img src="' + data.url + '" width="' + data.width + '" height="' + data.height + '" alt="render" class="img-thumbnail">' );
-						});
+						// appendImage( data );
 
 						$.each( data.resize, function(i, resized) {
-							$( "#image-render" ).append( '<img src="'+ resized.url +'" width="' + resized.width + '" height="' + resized.height + '" alt="render" class="img-thumbnail">' );
+							appendImage( resized );
 						});
 					}
 				});

@@ -21,19 +21,30 @@
 	var idFileInput = "file_input_image_data_url";
 
 	var _settings = {
-		url: true, // data URL loaded
-		text: false, // text loaded
-		blob: false, // binary string loaded
-		buffer: false, // array buffer loaded
-		exif: true, // exif data loaded (use https://github.com/mattiasw/ExifReader)
+		// url: true, // data URL loaded
+		// blob: false, // binary string loaded
+		// buffer: false, // array buffer loaded
+		// exif: true, // exif data loaded (use https://github.com/mattiasw/ExifReader)
+		returnImage: false, // true return an image objet in data
 		resize: false, // resize array
-		complete: $.noop
+		complete: $.noop,
+		exif: function( data ) {
+			try {
+				// exif data
+				// https://github.com/mattiasw/ExifReader
+				var exif = new ExifReader();
+				exif.load( data );
+				return exif.getAllTags();
+			} catch (error) {
+				return {};
+			}
+		}
 	};
 
 	var loadMethod = {
 		"url": "readAsDataURL",
-		"text": "readAsText",
-		"blob": "readAsBinaryString",
+		// "text": "readAsText",
+		// "blob": "readAsBinaryString",
 		"buffer": "readAsArrayBuffer"
 	}
 
@@ -96,7 +107,7 @@
 	* Transform canvas coordination according to specified frame size and orientation
 	* Orientation value is from EXIF tag
 	*/
-	function transformCoordinate(canvas, width, height, orientation) {
+	function transformOrientation(canvas, width, height, orientation) {
 		switch (orientation) {
 			case 5:
 			case 6:
@@ -152,6 +163,7 @@
 		}
 	}
 
+
 	// HTML file picker
 	function createPicker() {
 		var $inputFile = $("<input>", {
@@ -170,20 +182,22 @@
 		event.preventDefault();
 		event.stopPropagation();
 
-		_imageData = {};
-
 		var files = document.getElementById(idFileInput).files;
 		if (!files.length) {
 			return;
 		}
 		var file = files[0];
 
+		_imageData = {
+			name: file.name,
+			size: file.size,
+			type: file.type
+		};
+		
 		// loading methods
 		var _async = [];
 		for ( var m in loadMethod ) {
-			if ( _settings[ m ] ) {
-				_async.push( methods.load( file, m ) );
-			}
+			_async.push( methods.load( file, m ) );
 		}
 		$.when.apply( this, _async ).done(
 			function() {
@@ -191,9 +205,7 @@
 					// resize image
 					var _asyncResize = [];
 					$.each(_settings.resize, function(index, val) {
-						if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
-							val.orientation = _imageData.exif.Orientation.value;
-						}
+						val.orientation = ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) ? _imageData.exif.Orientation.value : 1;
 						_asyncResize.push( methods.resize( _imageData.url, val ) );
 					});
 					$.when.apply( this, _asyncResize ).done(
@@ -222,36 +234,50 @@
 				type: false,
 				width: false,
 				height: false,
+				// force: false,
 				orientation: 1
 			}
 			var settings = $.extend( {}, defaults, options ) ;
-			settings.type = settings.type || methods.type( dataURL );
+			settings.type = settings.type || _imageData.type || methods.type( dataURL );
 
 			var image = new Image();
 			image.src = dataURL;
 
 			return $.Deferred(function( defer ) {
 				image.onload = function() {
-					var maxWidth = settings.width || image.width,
-					maxHeight = settings.height || image.height,
-					imageWidth = image.width,
-					imageHeight = image.height;
+					// Calculate new image size
+					var imageWidth = image.width;
+					var imageHeight = image.height;
 
-					if (imageWidth > imageHeight) {
-						if (imageWidth > maxWidth) {
-							imageHeight *= maxWidth / imageWidth;
-							imageWidth = maxWidth;
-						}
-					} else {
-						if (imageHeight > maxHeight) {
-							imageWidth *= maxHeight / imageHeight;
-							imageHeight = maxHeight;
+					if ( settings.width != false && settings.height === false ) {
+						// set width and calculate height in proportion
+						imageWidth = settings.width;
+						imageHeight = image.height * settings.width / image.width;
+					} else if ( settings.width === false && settings.height != false ) {
+						// set height and calculate width in proportion
+						imageWidth = image.width * settings.height / image.height;
+						imageHeight = settings.height;
+					} else if ( settings.width != false && settings.height != false ) {
+						// constrained resizing
+						var maxWidth = settings.width;
+						var maxHeight = settings.height;
+
+						if (imageWidth > imageHeight) {
+							if (imageWidth > maxWidth) {
+								imageHeight *= maxWidth / imageWidth;
+								imageWidth = maxWidth;
+							}
+						} else {
+							if (imageHeight > maxHeight) {
+								imageWidth *= maxHeight / imageHeight;
+								imageHeight = maxHeight;
+							}
 						}
 					}
-
 					imageWidth = Math.round(imageWidth);
 					imageHeight = Math.round(imageHeight);
 
+					// Define canvas, context and image
 					var canvas = document.createElement("canvas");
 					var context = canvas.getContext("2d");
 
@@ -260,15 +286,34 @@
 					image.width = imageWidth;
 					image.height = imageHeight;
 
+					// Image natural size
 					var iw = image.naturalWidth, ih = image.naturalHeight;
 
+					// Get pixel ratio
+					var devicePixelRatio = window.devicePixelRatio || 1;
+					var backingStoreRatio = context.webkitBackingStorePixelRatio ||
+											context.mozBackingStorePixelRatio ||
+											context.msBackingStorePixelRatio ||
+											context.oBackingStorePixelRatio ||
+											context.backingStorePixelRatio || 1;
+
+					var ratio = devicePixelRatio / backingStoreRatio;
+					
+					iw /= ratio;
+					ih /= ratio;
+
+					// Subsampled fix for iphone 5 = retina ?
+					// var subsampled = detectSubsampling(image);
+					// if (subsampled) {
+					// 	iw /= ratio;
+					// 	ih /= ratio;
+					// }
+
 					context.save();
-					transformCoordinate(canvas, imageWidth, imageHeight, options.orientation);
-					var subsampled = detectSubsampling(image);
-					if (subsampled) {
-						iw /= 2;
-						ih /= 2;
-					}
+
+					// Orientation correction (orientation lost when image set in canvas)
+					transformOrientation(canvas, imageWidth, imageHeight, options.orientation);
+
 					var d = 1024; // size of tiling canvas
 					var tmpCanvas = document.createElement('canvas');
 					tmpCanvas.width = tmpCanvas.height = d;
@@ -295,10 +340,10 @@
 				    tmpCanvas = tmpCtx = null;
 
 					// Convert the resize image to a new file
-					var newURI = canvas.toDataURL(settings.type);
+					var newURL = canvas.toDataURL(settings.type);
 
 					var data = {
-						url: newURI, 
+						url: newURL, 
 						width: imageWidth,
 						height: imageHeight
 					}
@@ -311,17 +356,6 @@
 				};
 		    }).promise();
 		},
-		exif: function( data ) {
-			try {
-				// exif data
-				// https://github.com/mattiasw/ExifReader
-				var exif = new ExifReader();
-				exif.load( data );
-				return exif.getAllTags();
-			} catch (error) {
-				return {};
-			}
-		},
 		load: function( file, method ) {
 			method = method || "url";
 			method = ( loadMethod[ method ] == undefined ) ? "url" : method;
@@ -331,16 +365,20 @@
 					// If we use onloadend, we need to check the readyState.
 					if (evt.target.readyState == FileReader.DONE) { // DONE == 2
 						_imageData[ method ] = evt.target.result;
-						if ( method === "buffer" && _settings.exif ) {
-							// exif data
-							_imageData.exif = methods.exif( _imageData[ method ] );
+						if ( method === "buffer" ) {
+							// exif data (orientation)
+							_imageData.exif = _settings.exif( _imageData[ method ] );
 							if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
 								_imageData.orientation = _imageData.exif.Orientation.value;
+							} else {
+								_imageData.orientation = 1;
 							}
 						}
 						if ( method === "url" ) {
+							// size data (width, height)
 							var image = new Image();
 							image.src = _imageData[ method ];
+							if ( _settings.returnImage ) _imageData.image = image;
 							image.onload = function() {
 								_imageData.width = image.width,
 								_imageData.height = image.height;
@@ -367,8 +405,8 @@
 
 		if (options === undefined || typeof options === "object") {
 			$.extend( _settings, options || {} ) ;
-			if ( _settings.exif ) _settings.buffer = true;
-			if ( _settings.resize ) _settings.url = true;
+			// if ( _settings.exif ) _settings.buffer = true;
+			// if ( _settings.resize ) _settings.url = true;
 
 			picker = picker || createPicker();
 
