@@ -49,34 +49,43 @@
 			<div id="image-render"></div>
 
 			<script>
+			function appendImage( data ) {
+				$( "#image-render" ).append([
+					'<div class="thumbnail">',
+						'<img',
+							' src="' + data.url + '"',
+							// ' width="' + data.width + '"',
+							// ' height="' + data.height + '"',
+							' alt="render">',
+						'<div class="caption">',
+							'<p class="text-center">'+data.width+' x '+data.height+'</p>',
+						'</div>',
+					'</div>'
+				].join( "" ));
+			}
 			$(document).ready(function(){
-				function appendImage( data ) {
-					$( "#image-render" ).append([
-						'<div class="thumbnail">',
-							'<img src="' + data.url + '" width="' + data.width + '" height="' + data.height + '" alt="render">',
-							'<div class="caption">',
-								'<p class="text-center">'+data.width+' x '+data.height+'</p>',
-							'</div>',
-						'</div>'
-					].join( "" ));
-				}
 				$( "#image_picker" ).imageData({
 					// returnImage: true,
-					resize: [
-						{ width: 200, height: 200 },
-						{ width: 200 },
-						{ height: 200 },
-						{ width: 100, height: 100 },
-						{}
-					],
+					// resize: [
+					// 	{ width: 200, height: 200 },
+					// 	{ width: 200 },
+					// 	{ height: 200 },
+					// 	{ width: 100, height: 100 },
+					// 	{}
+					// ],
 					complete: function(data) {
-						// console.log(data);
+						console.log(data);
 						
 						$( "#image-render" ).html("");
 
-						$( "#image-render" ).append( "<p>" + data.name + " (" + data.type + ")<br>" + data.width + " x " + data.height + " - " + data.size + " octets<br>Orientation " + data.orientation + "</p>");
+						$( "#image-render" ).append( "<p>" + data.file.name + " (" + data.file.type + ")<br>" + data.width + " x " + data.height + " - " + data.file.size + " octets<br>Orientation " + data.orientation + " - Ratio " + data.ratio + "</p>");
 
-						// appendImage( data );
+						$( "#image-render" ).append("<p>Returned:</p>");
+						appendImage( data );
+
+						// var dataCanvas = $.extend( {}, data );
+						// dataCanvas.url = dataCanvas.canvas;
+						// appendImage( dataCanvas );
 
 						$.each( data.resize, function(i, resized) {
 							appendImage( resized );
