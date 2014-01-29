@@ -20,13 +20,10 @@
 
 	var idFileInput = "file_input_image_data_url";
 
-	var _settings = {
-		// url: true, // data URL loaded
-		// blob: false, // binary string loaded
-		// buffer: false, // array buffer loaded
-		// exif: true, // exif data loaded (use https://github.com/mattiasw/ExifReader)
+	var _defaults = {
+		file: false, // autoload file
 		returnImage: false, // true return an image objet in data
-		resize: false, // resize array
+		transform: false, // transform array
 		complete: $.noop,
 		exif: function( data ) {
 			try {
@@ -41,18 +38,8 @@
 		}
 	};
 
-	var loadMethod = {
-		"url": "readAsDataURL",
-		// "text": "readAsText",
-		// "blob": "readAsBinaryString",
-		"buffer": "readAsArrayBuffer"
-	}
-
 	// cache image data
 	var _imageData = {};
-
-	// picker (input file)
-	var picker = false;
 
 
 	/**
@@ -163,73 +150,85 @@
 		}
 	}
 
-
-	// HTML file picker
-	function createPicker() {
-		var $inputFile = $("<input>", {
-			"type": "file",
-			"name": idFileInput,
-			"id": idFileInput,
-			"style": "display:none;"
-		}).on( "change", handlePicker );
-
-		$( "body" ).prepend( $inputFile );
-
-		return $inputFile;
+	function Plugin( options ) {
+		this.options = $.extend( true, {}, _defaults, options || {} );
 	}
 
-	function handlePicker(event) {
-		event.preventDefault();
-		event.stopPropagation();
-
-		var files = document.getElementById(idFileInput).files;
-		if (!files.length) {
-			return;
-		}
-		var file = files[0];
-
-		_imageData = {
-			name: file.name,
-			size: file.size,
-			type: file.type
-		};
-		
-		// loading methods
-		var _async = [];
-		for ( var m in loadMethod ) {
-			_async.push( methods.load( file, m ) );
-		}
-		$.when.apply( this, _async ).done(
-			function() {
-				if ( _settings.resize ) {
-					// resize image
-					var _asyncResize = [];
-					$.each(_settings.resize, function(index, val) {
-						val.orientation = ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) ? _imageData.exif.Orientation.value : 1;
-						_asyncResize.push( methods.resize( _imageData.url, val ) );
-					});
-					$.when.apply( this, _asyncResize ).done(
-						function() {
-							// render image data with resized images
-							_imageData.resize = arguments;
-							_settings.complete( _imageData );
-						}
-					);
-				} else {
-					// render image data
-					_settings.complete( _imageData );
-				}
-			}
-		);
-	}
-
-	var methods = {
+	Plugin.prototype = {
 		type: function( dataURL ) {
 			var t = dataURL.split(";");
 			var t2 = t[0].split(":");
 			return t2[1];
 		},
 		crop: function( dataURL, options, callback ) {
+			var self = this;
+			
+			var defaults = {
+				type: false,
+				square: 100 // false
+				// force: false
+			}
+			var settings = $.extend( {}, defaults, options ) ;
+			settings.type = settings.type || _imageData.type || this.type( dataURL );
+
+			var image = new Image();
+			image.src = dataURL;
+
+			return $.Deferred(function( defer ) {
+				image.onload = function() {
+					// Calculate new image size
+					var imageWidth = image.width;
+					var imageHeight = image.height;
+
+					var sx, sy, sLargeur, sHauteur;
+
+					if ( imageWidth > imageHeight ) {
+						// landscape
+						sx = ( imageWidth - imageHeight ) / 2;
+						sy = 0;
+						sLargeur = imageHeight;
+						sHauteur = imageHeight;
+					} else {
+						// portrait
+						sx = 0;
+						sy = ( imageHeight - imageWidth ) / 2;
+						sLargeur = imageWidth;
+						sHauteur = imageWidth;
+					}
+					sx = Math.round( sx );
+					sy = Math.round( sy );
+					sLargeur = Math.round( sLargeur );
+					sHauteur = Math.round( sHauteur );
+
+					// Define canvas, context and image
+					var canvas = document.createElement("canvas");
+
+					canvas.width = settings.square;
+					canvas.height = settings.square;
+
+					var context = canvas.getContext("2d");
+					context.drawImage(this, sx, sy, sLargeur, sHauteur, 0, 0, settings.square, settings.square)
+
+					// Convert the resize image to a new file
+					var newURL = canvas.toDataURL(settings.type);
+
+					var data = {
+						url: newURL, 
+						width: settings.square,
+						height: settings.square
+					}
+
+					defer.resolve( data );
+					if ( callback ) callback( data );
+				};
+				image.onerror = function(error) {
+					defer.reject( error );
+				};
+			}).promise();
+		},
+		resize: function( dataURL, options, callback ) {
+			var self = this;
+			
 			var defaults = {
 				type: false,
 				width: false,
@@ -237,23 +236,12 @@
 				// force: false
 			}
 			var settings = $.extend( {}, defaults, options ) ;
-			settings.type = settings.type || _imageData.type || methods.type( dataURL );
-		},
-		resize: function( dataURL, options, callback ) {
-			var defaults = {
-				type: false,
-				width: false,
-				height: false,
-				// force: false,
-				orientation: 1
-			}
-			var settings = $.extend( {}, defaults, options ) ;
-			settings.type = settings.type || _imageData.type || methods.type( dataURL );
-
-			var image = new Image();
-			image.src = dataURL;
+			settings.type = settings.type || _imageData.file.type || this.type( dataURL );
 
 			return $.Deferred(function( defer ) {
+				var image = new Image();
+				image.src = dataURL;
+
 				image.onload = function() {
 					// Calculate new image size
 					var imageWidth = image.width;
@@ -289,12 +277,72 @@
 
 					// Define canvas, context and image
 					var canvas = document.createElement("canvas");
-					var context = canvas.getContext("2d");
 
 					canvas.width = imageWidth;
 					canvas.height = imageHeight;
 					image.width = imageWidth;
 					image.height = imageHeight;
+
+					var context = canvas.getContext("2d");
+					context.drawImage(this, 0, 0, imageWidth, imageHeight);
+
+					// Convert the resize image to a new file
+					var newURL = canvas.toDataURL(settings.type);
+
+					var data = {
+						url: newURL, 
+						width: imageWidth,
+						height: imageHeight
+					}
+
+					defer.resolve( data );
+					if ( callback ) callback( data );
+				}
+				image.onerror = function(error) {
+					defer.reject( error );
+				};
+			}).promise();
+		},
+		canvas: function( callback ) {
+			var self = this;
+			
+			return $.Deferred(function( defer ) {
+				// size data (width, height)
+				var image = new Image();
+				image.src = _imageData.url;
+				if ( self.options.returnImage ) {
+					_imageData.image = image;
+				}
+				image.onload = function() {
+					_imageData.width = image.width,
+					_imageData.height = image.height;
+
+					// constrained resizing
+					var maxWidth = 2048;//1024;
+					var maxHeight = 2048;//1024;
+
+					if (_imageData.width > _imageData.height) {
+						if (_imageData.width > maxWidth) {
+							_imageData.height *= maxWidth / _imageData.width;
+							_imageData.width = maxWidth;
+						}
+					} else {
+						if (_imageData.height > maxHeight) {
+							_imageData.width *= maxHeight / _imageData.height;
+							_imageData.height = maxHeight;
+						}
+					}
+					_imageData.width = Math.round(_imageData.width);
+					_imageData.height = Math.round(_imageData.height);
+
+					// Define canvas, context and image
+					var canvas = document.createElement("canvas");
+					var context = canvas.getContext("2d");
+
+					canvas.width = _imageData.width;
+					canvas.height = _imageData.height;
+					image.width = _imageData.width;
+					image.height = _imageData.height;
 
 					// Image natural size
 					var iw = image.naturalWidth, ih = image.naturalHeight;
@@ -308,29 +356,28 @@
 											context.backingStorePixelRatio || 1;
 
 					var ratio = devicePixelRatio / backingStoreRatio;
-					
-					iw /= ratio;
-					ih /= ratio;
 
+					_imageData.ratio = ratio;
+					
 					// Subsampled fix for iphone 5 = retina ?
-					// var subsampled = detectSubsampling(image);
-					// if (subsampled) {
-					// 	iw /= ratio;
-					// 	ih /= ratio;
-					// }
+					var subsampled = detectSubsampling(image);
+					if (subsampled) {
+						iw /= ratio;
+						ih /= ratio;
+					}
 
 					context.save();
 
 					// Orientation correction (orientation lost when image set in canvas)
-					transformOrientation(canvas, imageWidth, imageHeight, options.orientation);
+					transformOrientation( canvas, _imageData.width, _imageData.height, _imageData.orientation );
 
 					var d = 1024; // size of tiling canvas
 					var tmpCanvas = document.createElement('canvas');
 					tmpCanvas.width = tmpCanvas.height = d;
 					var tmpCtx = tmpCanvas.getContext('2d');
 					var vertSquashRatio = detectVerticalSquash(image, iw, ih);
-					var dw = Math.ceil(d * imageWidth / iw);
-					var dh = Math.ceil(d * imageHeight / ih / vertSquashRatio);
+					var dw = Math.ceil(d * _imageData.width / iw);
+					var dh = Math.ceil(d * _imageData.height / ih / vertSquashRatio);
 					var sy = 0;
 					var dy = 0;
 					while (sy < ih) {
@@ -346,87 +393,115 @@
 						sy += d;
 						dy += dh;
 					}
-				    context.restore();
-				    tmpCanvas = tmpCtx = null;
+					context.restore();
+					tmpCanvas = tmpCtx = null;
 
 					// Convert the resize image to a new file
-					var newURL = canvas.toDataURL(settings.type);
-
-					var data = {
-						url: newURL, 
-						width: imageWidth,
-						height: imageHeight
-					}
-
-					defer.resolve( data );
-					if ( callback ) callback( data );
-				};
-				image.onerror = function(error) {
+					// _imageData.canvas = canvas.toDataURL( _imageData.file.type );
+					_imageData.url = canvas.toDataURL( _imageData.file.type );
+					
+					defer.resolve( _imageData );
+					if ( callback ) callback( _imageData );
+				}
+				image.onerror = function( error ) {
 					defer.reject( error );
 				};
-		    }).promise();
+			}).promise();
 		},
-		load: function( file, method ) {
-			method = method || "url";
-			method = ( loadMethod[ method ] == undefined ) ? "url" : method;
+		load: function( file ) {
+			var self = this;
+
+			// save file data
+			_imageData = {
+				file: {
+					name: file.name,
+					size: file.size,
+					type: file.type
+				}
+			};
+
 			return $.Deferred(function( defer ) {
-				var reader = new FileReader();
-				reader.onloadend = function(evt) {
-					// If we use onloadend, we need to check the readyState.
-					if (evt.target.readyState == FileReader.DONE) { // DONE == 2
-						_imageData[ method ] = evt.target.result;
-						if ( method === "buffer" ) {
-							// exif data (orientation)
-							_imageData.exif = _settings.exif( _imageData[ method ] );
-							if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
-								_imageData.orientation = _imageData.exif.Orientation.value;
-							} else {
-								_imageData.orientation = 1;
-							}
-						}
-						if ( method === "url" ) {
-							// size data (width, height)
-							var image = new Image();
-							image.src = _imageData[ method ];
-							if ( _settings.returnImage ) _imageData.image = image;
-							image.onload = function() {
-								_imageData.width = image.width,
-								_imageData.height = image.height;
-								defer.resolve(_imageData[ method ]);
-							}
+				var readerExif = new FileReader();
+
+				// use readAsArrayBuffer for exif data
+				readerExif.onloadend = function( evt ) {
+					// if we use onloadend, we need to check the readyState.
+					if ( evt.target.readyState == FileReader.DONE ) { // DONE == 2
+						
+						// save buffer data
+						var buffer = evt.target.result;
+
+						// exif data (orientation)
+						_imageData.exif = self.options.exif( buffer );
+
+						if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
+							_imageData.orientation = _imageData.exif.Orientation.value;
 						} else {
-							defer.resolve(_imageData[ method ]);
+							_imageData.orientation = 1;
 						}
+
+						// use readAsDataURL to trasform in canvas
+						var readerURL = new FileReader();
+
+						readerURL.onloadend = function( evt ) {
+							// if we use onloadend, we need to check the readyState.
+							if ( evt.target.readyState == FileReader.DONE ) { // DONE == 2
+								
+								// save image data URL
+								_imageData.url = evt.target.result;
+
+								// put image in a canvas
+								self.canvas( function() {
+									if ( self.options.transform ) {
+										var _asyncTransform = [];
+										$.each( self.options.transform, function( index, transform ) {
+											_asyncTransform.push( self[ transform.action ]( _imageData.url, transform.options ) );
+										});
+										$.when.apply( this, _asyncTransform ).done(
+											function() {
+												// render image data with transformed images
+												_imageData.transform = arguments;
+
+												defer.resolve( _imageData );
+												if ( self.options.complete ) self.options.complete( _imageData );
+											}
+										);
+									} else {
+										defer.resolve( _imageData );
+										if ( self.options.complete ) self.options.complete( _imageData );
+									}
+								});
+							}
+						};
+						readerURL.onabort = function(error) {
+							defer.reject( error );
+						};
+						readerURL.onerror = function(error) {
+							defer.reject( error );
+						};
+						readerURL.readAsDataURL( file );
 					}
 				};
-				reader.onabort = function(error) {
+				readerExif.onabort = function(error) {
 					defer.reject( error );
 				};
-				reader.onerror = function(error) {
+				readerExif.onerror = function(error) {
 					defer.reject( error );
 				};
-				reader[ loadMethod[ method ] ](file);
+				readerExif.readAsArrayBuffer( file );
 			}).promise();
 		}
 	}
 
-	$.fn[pluginName] = function(options) {
+	window[ pluginName ] = function( options ) {
 		var args = arguments;
-
-		if (options === undefined || typeof options === "object") {
-			$.extend( _settings, options || {} ) ;
-			// if ( _settings.exif ) _settings.buffer = true;
-			// if ( _settings.resize ) _settings.url = true;
-
-			picker = picker || createPicker();
-
-			return this.each(function () {
-				$(this).on( "click", function() {
-					picker.trigger( "click" );
-				});
-			});
-		} else if (typeof options === "string" && methods[options] != undefined) {
-			return methods[options].apply( this, Array.prototype.slice.call( args, 1 ) );
+		if ( options === undefined || typeof options === "object" ) {
+			var _plugin = new Plugin( options );
+			if ( _plugin.options.file !== false ) {
+				return _plugin.load( _plugin.options.file );
+			} else {
+				return _plugin;
+			}
 		}
 	};
 })(window, jQuery, document);

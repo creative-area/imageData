@@ -22,7 +22,7 @@
 
 	var _settings = {
 		returnImage: false, // true return an image objet in data
-		resize: false, // resize array
+		transform: false, // transform array
 		complete: $.noop,
 		exif: function( data ) {
 			try {
@@ -177,52 +177,8 @@
 		}
 		var file = files[0];
 
-		_imageData = {
-			file: {
-				name: file.name,
-				size: file.size,
-				type: file.type
-			}
-		};
-
 		// loading
 		methods.load( file );
-		
-		// loading methods
-		// var _async = [];
-		// for ( var m in loadMethod ) {
-		// 	_async.push( methods.load( file, m ) );
-		// }
-		// $.when.apply( this, _async ).done(
-		// 	function() {
-		// 		methods.draw( _imageData.url ).done(function( data ) {
-		// 			_imageData.fixed = data.url;
-		// 			if ( _settings.resize ) {
-		// 				// resize image
-		// 				var _asyncTransform = [];
-		// 				$.each(_settings.resize, function(index, val) {
-		// 					val.orientation = ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) ? _imageData.exif.Orientation.value : 1;
-		// 					_asyncTransform.push( methods.resize( _imageData.fixed, val ) );
-		// 				});
-		// 				// $.each(_settings.draw, function(index, val) {
-		// 				// 	val.orientation = ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) ? _imageData.exif.Orientation.value : 1;
-		// 				// 	_asyncTransform.push( methods.draw( _imageData.url, val ) );
-		// 				// });
-		// 				$.when.apply( this, _asyncTransform ).done(
-		// 					function() {
-		// 						// render image data with resized images
-		// 						_imageData.resize = arguments;
-		// 						_settings.complete( _imageData );
-		// 					}
-		// 				);
-		// 			} else {
-		// 				// render image data
-		// 				_settings.complete( _imageData );
-		// 			}
-
-		// 		});
-		// 	}
-		// );
 	}
 
 	var methods = {
@@ -305,7 +261,7 @@
 			var settings = $.extend( {}, defaults, options ) ;
 			settings.type = settings.type || _imageData.file.type || methods.type( dataURL );
 
-			//return $.Deferred(function( defer ) {
+			return $.Deferred(function( defer ) {
 				var image = new Image();
 				image.src = dataURL;
 
@@ -362,12 +318,15 @@
 						height: imageHeight
 					}
 
-					//defer.resolve( data );
+					defer.resolve( data );
 					if ( callback ) callback( data );
 				}
-			//}).promise();
+				image.onerror = function(error) {
+					defer.reject( error );
+				};
+			}).promise();
 		},
-		canvasURL: function( callback ) {
+		canvas: function( callback ) {
 			return $.Deferred(function( defer ) {
 				// size data (width, height)
 				var image = new Image();
@@ -471,6 +430,15 @@
 			}).promise();
 		},
 		load: function( file ) {
+			// save file data
+			_imageData = {
+				file: {
+					name: file.name,
+					size: file.size,
+					type: file.type
+				}
+			};
+
 			var readerExif = new FileReader();
 
 			// use readAsArrayBuffer for exif data
@@ -479,10 +447,10 @@
 				if ( evt.target.readyState == FileReader.DONE ) { // DONE == 2
 					
 					// save buffer data
-					_imageData.buffer = evt.target.result;
+					var buffer = evt.target.result;
 
 					// exif data (orientation)
-					_imageData.exif = _settings.exif( _imageData.buffer );
+					_imageData.exif = _settings.exif( buffer );
 
 					if ( _imageData.exif && _imageData.exif.Orientation && _imageData.exif.Orientation.value ) {
 						_imageData.orientation = _imageData.exif.Orientation.value;
@@ -497,20 +465,26 @@
 						// if we use onloadend, we need to check the readyState.
 						if ( evt.target.readyState == FileReader.DONE ) { // DONE == 2
 							
-							// save buffer data
+							// save image data URL
 							_imageData.url = evt.target.result;
 
 							// put image in a canvas
-							methods.canvasURL( function() {
-
-								methods.resize( _imageData.url, { width: 200, height: 200 }, function( data ) {
-									_imageData.resize = [ data ];
-
-									methods.crop( _imageData.url, { square: 200 }, function( data ) {
-										_imageData.resize.push( data );
-										_settings.complete( _imageData );
+							methods.canvas( function() {
+								if ( _settings.transform ) {
+									var _asyncTransform = [];
+									$.each( _settings.transform, function( index, transform ) {
+										_asyncTransform.push( methods[ transform.action ]( _imageData.url, transform.options ) );
 									});
-								});
+									$.when.apply( this, _asyncTransform ).done(
+										function() {
+											// render image data with transformed images
+											_imageData.transform = arguments;
+											_settings.complete( _imageData );
+										}
+									);
+								} else {
+									_settings.complete( _imageData );
+								}
 							});
 						}
 					};
@@ -530,11 +504,6 @@
 				defer.reject( error );
 			};
 			readerExif.readAsArrayBuffer( file );
-
-			// return $.Deferred(function( defer ) {
-			// 	defer.resolve( data );
-			// 	defer.reject( error );
-			// }).promise();
 		}
 	}
 

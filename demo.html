@@ -17,7 +17,8 @@
 		<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/prettify/r298/prettify.js"></script>
 
 		<script type="text/javascript" src="ExifReader/js/ExifReader.js"></script>
-		<script type="text/javascript" src="ImageData2.js"></script>
+		<script type="text/javascript" src="ImageData.js"></script>
+		<script type="text/javascript" src="jquery.imagePicker.js"></script>
 
 		<!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
 		<!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
@@ -66,33 +67,84 @@
 				].join( "" ));
 			}
 			$(document).ready(function(){
-				$( "#image_picker" ).imageData({
-					// returnImage: true,
-					// resize: [
-					// 	{ width: 200, height: 200 },
-					// 	{ width: 200 },
-					// 	{ height: 200 },
-					// 	{ width: 100, height: 100 },
-					// 	{}
-					// ],
-					complete: function(data) {
-						console.log(data);
-						
-						$( "#image-render" ).html("");
+				$( "#image_picker" ).imagePicker( function( file ) {
 
+					$( "#image-render" ).html("");
+
+					imageData({
+						transform: [
+							{ 
+								action: "resize",
+								options: { width: 200, height: 200 }
+							},
+							{ 
+								action: "resize",
+								options: { width: 300 }
+							},
+							{ 
+								action: "resize",
+								options: { height: 300 }
+							},
+							{ 
+								action: "crop",
+								options: { square: 200 }
+							},
+							{ 
+								action: "crop",
+								options: { square: 100 }
+							}
+						]
+					}).load( file ).done(function( data ){
+						console.log( data );
+						
 						$( "#image-render" ).append( "<p>" + data.file.name + " (" + data.file.type + ")<br>" + data.width + " x " + data.height + " - " + data.file.size + " octets<br>Orientation " + data.orientation + " - Ratio " + data.ratio + "</p>");
 
-						$( "#image-render" ).append("<p>Returned:</p>");
 						appendImage( data );
 
-						// var dataCanvas = $.extend( {}, data );
-						// dataCanvas.url = dataCanvas.canvas;
-						// appendImage( dataCanvas );
-
-						$.each( data.resize, function(i, resized) {
-							appendImage( resized );
+						$.each( data.transform, function(i, transformed ) {
+							appendImage( transformed );
 						});
-					}
+					});
+
+
+					var _id = imageData();
+					_id.load( file ).done( function( data ) {
+						_id.crop( data.url, { square: 320 } ).done( function( data ) {
+							$( "#image-render" ).append("<hr>");
+							appendImage( data );
+						});
+					});
+
+
+					var _id2 = imageData({ file: file });
+					_id2.done( function( data ) {
+						_id.resize( data.url, { width: 500, height: 500 } ).done( function( data ) {
+							$( "#image-render" ).append("<hr>");
+							appendImage( data );
+						});
+					});
+
+
+					imageData({
+						file: file,
+						transform: [
+							{ 
+								action: "crop",
+								options: { square: 500 }
+							}
+						]
+					}).done(function( data ){
+						console.log( data );
+						
+						$( "#image-render" ).append("<hr>");
+						$( "#image-render" ).append( "<p>" + data.file.name + " (" + data.file.type + ")<br>" + data.width + " x " + data.height + " - " + data.file.size + " octets<br>Orientation " + data.orientation + " - Ratio " + data.ratio + "</p>");
+
+						appendImage( data );
+
+						$.each( data.transform, function(i, transformed ) {
+							appendImage( transformed );
+						});
+					});
 				});
 			});
 			</script>

@@ -19,14 +19,20 @@ function createPicker() {
 		"name": idFileInput,
 		"id": idFileInput,
 		"style": "display:none;"
-	}).on( "change", handlePicker );
+	})
+	.on( "click", handleClick )
+	.on( "change", handlePicker );
 
 	$( "body" ).prepend( $inputFile );
 
 	return $inputFile;
 }
 
-function handlePicker(event) {
+function handleClick( event, callback ) {
+	$picker.data( "callback", callback );
+}
+
+function handlePicker( event ) {
 	event.preventDefault();
 	event.stopPropagation();
 
@@ -36,23 +42,16 @@ function handlePicker(event) {
 	}
 	var file = files[0];
 
-	_imageData = {
-		name: file.name,
-		size: file.size,
-		type: file.type
-	};
+	var cb = $picker.data( "callback" );
+	cb( file );
 }
 
-$.fn[pluginName] = function( callbackEvent ) {
-	var $element = this;
-
-	this.data( "callback", callbackEvent );
-
+$.fn[pluginName] = function( callback ) {
 	$picker = $picker || createPicker();
 
 	return this.each(function () {
 		$(this).on( "click", function() {
-			$picker.trigger( "click" );
+			$picker.trigger( "click", callback );
 		});
 	});
 };
