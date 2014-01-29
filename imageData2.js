@@ -21,10 +21,6 @@
 	var idFileInput = "file_input_image_data_url";
 
 	var _settings = {
-		// url: true, // data URL loaded
-		// blob: false, // binary string loaded
-		// buffer: false, // array buffer loaded
-		// exif: true, // exif data loaded (use https://github.com/mattiasw/ExifReader)
 		returnImage: false, // true return an image objet in data
 		resize: false, // resize array
 		complete: $.noop,
@@ -40,13 +36,6 @@
 			}
 		}
 	};
-
-	var loadMethod = {
-		"url": "readAsDataURL",
-		// "text": "readAsText",
-		// "blob": "readAsBinaryString",
-		"buffer": "readAsArrayBuffer"
-	}
 
 	// cache image data
 	var _imageData = {};
@@ -390,10 +379,9 @@
 					_imageData.width = image.width,
 					_imageData.height = image.height;
 
-
 					// constrained resizing
-					var maxWidth = 1024;
-					var maxHeight = 1024;
+					var maxWidth = 2048;//1024;
+					var maxHeight = 2048;//1024;
 
 					if (_imageData.width > _imageData.height) {
 						if (_imageData.width > maxWidth) {
@@ -408,11 +396,6 @@
 					}
 					_imageData.width = Math.round(_imageData.width);
 					_imageData.height = Math.round(_imageData.height);
-
-
-					// $( "#image-render" ).append("<p>Original:</p>");
-					// appendImage( _imageData );
-
 
 					// Define canvas, context and image
 					var canvas = document.createElement("canvas");
@@ -475,13 +458,9 @@
 					context.restore();
 					tmpCanvas = tmpCtx = null;
 
-
 					// Convert the resize image to a new file
 					// _imageData.canvas = canvas.toDataURL( _imageData.file.type );
 					_imageData.url = canvas.toDataURL( _imageData.file.type );
-
-					// $( "#image-render" ).append("<p>Canvas:</p>");
-					// appendImage( _imageData );
 					
 					defer.resolve( _imageData );
 					if ( callback ) callback( _imageData );
@@ -552,8 +531,6 @@
 			};
 			readerExif.readAsArrayBuffer( file );
 
-			
-
 			// return $.Deferred(function( defer ) {
 			// 	defer.resolve( data );
 			// 	defer.reject( error );
@@ -566,8 +543,6 @@
 
 		if (options === undefined || typeof options === "object") {
 			$.extend( _settings, options || {} ) ;
-			// if ( _settings.exif ) _settings.buffer = true;
-			// if ( _settings.resize ) _settings.url = true;
 
 			picker = picker || createPicker();
 
