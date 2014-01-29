@@ -16,15 +16,16 @@
 */
 
 ;(function(window, $, document, undefined) {
+	$ = $ || {};
+	
 	var pluginName = "imageData";
-
-	var idFileInput = "file_input_image_data_url";
 
 	var _defaults = {
 		file: false, // autoload file
 		returnImage: false, // true return an image objet in data
 		transform: false, // transform array
-		complete: $.noop,
+		complete: function() {},
+		deferred: $.Deferred || function() {},
 		exif: function( data ) {
 			try {
 				// exif data
@@ -174,7 +175,7 @@
 			var image = new Image();
 			image.src = dataURL;
 
-			return $.Deferred(function( defer ) {
+			return self.options.deferred(function( defer ) {
 				image.onload = function() {
 					// Calculate new image size
 					var imageWidth = image.width;
@@ -238,7 +239,7 @@
 			var settings = $.extend( {}, defaults, options ) ;
 			settings.type = settings.type || _imageData.file.type || this.type( dataURL );
 
-			return $.Deferred(function( defer ) {
+			return self.options.deferred(function( defer ) {
 				var image = new Image();
 				image.src = dataURL;
 
@@ -306,7 +307,7 @@
 		canvas: function( callback ) {
 			var self = this;
 			
-			return $.Deferred(function( defer ) {
+			return self.options.deferred(function( defer ) {
 				// size data (width, height)
 				var image = new Image();
 				image.src = _imageData.url;
@@ -420,7 +421,7 @@
 				}
 			};
 
-			return $.Deferred(function( defer ) {
+			return self.options.deferred(function( defer ) {
 				var readerExif = new FileReader();
 
 				// use readAsArrayBuffer for exif data
